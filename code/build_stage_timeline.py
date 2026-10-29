@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 the authors of Efforts. All rights reserved.
-# SPDX-License-Identifier: LicenseRef-Efforts-Limited-Review-Verification-1.0
+# Copyright (c) 2026 the authors of Effort. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Effort-Limited-Review-Verification-1.0
 # Licensed under the Limited Review and Verification License; see ../LICENSE.md.
 
 """

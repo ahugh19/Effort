@@ -1,8 +1,8 @@
 # Effort: public release (minimal reproducible subset)
 
-This package is the minimal set of files that satisfies the paper's open-access
-checklist item and matches the reproducibility section of the supplementary
-appendix. It lets a reader regenerate the deterministic parts of the pipeline and
+This package is the minimal set of files that accompanies the supplementary
+appendix of the paper (`appendix/Effort_appendix.pdf`) and matches its
+reproducibility section. It lets a reader regenerate the deterministic parts of the pipeline and
 inspect every retained artifact, without redistributing FineDance. The re-performed
 cover is included as a fixed generative output, not
 as something to be regenerated.
@@ -24,13 +24,20 @@ audio/
   sonification.mid             symbolic sonification score
   sonification_render.mp3      fixed mastered render of the deterministic score
   cover.mp3                     the re-performed cover heard in the video, a fixed generative output
-  cover_kun.mp3                 the Kun-register cover that conditions the dance, a fixed generative output
+  cover_kun.mp3                 the Kunqu-style cover that conditions the dance, a fixed generative output
 timeline/
   stage_timeline.json          aligned note/bar/phase/word timeline used by the video
+appendix/
+  Effort_appendix.pdf          the supplementary appendix of the paper, compiled from the files below
+  Effort_appendix.tex          standalone wrapper (title, authors, bibliography)
+  appendix.tex                 the appendix text, identical to tex/appendix.tex in the paper source
+  reference.bib, neurips_2026.sty   bibliography and NeurIPS 2026 style needed to rebuild the PDF
 ```
 
 The Weight/Time/Space to Effort-word rule and all thresholds are specified in the
-supplementary appendix and are a pure function of `data/phase_log.csv`.
+supplementary appendix (`appendix/Effort_appendix.pdf`, Section C) and are a pure
+function of `data/phase_log.csv`. To rebuild the appendix PDF, run
+`latexmk -pdf Effort_appendix.tex` inside `appendix/`.
 
 ## Not included (obtain from the source)
 
@@ -79,7 +86,7 @@ python code/build_stage_timeline.py --wav audio/cover.mp3
 
 ## License
 
-Copyright (c) 2026 the authors of Efforts. All rights reserved.
+Copyright (c) 2026 the authors of Effort. All rights reserved.
 
 The code and supplementary materials are provided under the
 [Limited Review and Verification License](LICENSE.md). They may be inspected

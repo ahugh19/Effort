@@ -1,0 +1,68 @@
+% Copyright (c) 2026 the authors of Effort. All rights reserved.
+% SPDX-License-Identifier: LicenseRef-Effort-Limited-Review-Verification-1.0
+% Licensed under the Limited Review and Verification License; see ../LICENSE.md.
+%
+% Standalone build of the supplementary appendix of
+%   Effort. NeurIPS 2026 Creative AI Track.
+% appendix.tex is the same file as tex/appendix.tex in the paper source.
+% Build:  latexmk -pdf Effort_appendix.tex
+
+\documentclass{article}
+
+\PassOptionsToPackage{numbers, compress}{natbib}
+\usepackage[creativeai, final]{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+\hypersetup{
+  hidelinks,
+  pdftitle={Supplementary Appendix for Effort},
+  pdfauthor={Junxiu Tang, Hanna Renedo, Yifang Wang, Dashun Wang},
+}
+
+\title{Supplementary Appendix for \emph{Effort}}
+
+\author{%
+  Junxiu Tang$^{1}$ \quad
+  Hanna Renedo$^{1}$ \quad
+  Yifang Wang$^{2}$ \quad
+  Dashun Wang$^{1}$ \\
+  $^{1}$Kellogg School of Management, Northwestern University,
+  Evanston, IL 60201, USA \\
+  $^{2}$Department of Computer Science, Florida State University,
+  Tallahassee, FL 32301, USA \\
+  \texttt{\{junxiu.tang,hanna.renedo,dashun.wang\}@kellogg.northwestern.edu} \\
+  \texttt{yifang.wang@fsu.edu}
+}
+
+\begin{document}
+
+\maketitle
+
+\begingroup
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+\footnotetext[1]{Human dance performance and improvisation by Qianni Wang.}
+\endgroup
+\setcounter{footnote}{0}
+
+\noindent
+This document is the appendix of the paper \emph{Effort}, published in the NeurIPS 2026 Creative AI Track.
+It accompanies the release at \url{https://github.com/ahugh19/Effort}, and its section letters match the appendix sections of the paper.
+
+\appendix
+\input{appendix}
+
+\bibliographystyle{unsrtnat}
+\bibliography{reference}
+
+\end{document}

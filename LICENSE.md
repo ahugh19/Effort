@@ -1,8 +1,8 @@
-# Efforts Supplementary Materials
+# Effort Supplementary Materials
 
 ## Limited Review and Verification License
 
-Copyright (c) 2026 the authors of Efforts. All rights reserved.
+Copyright (c) 2026 the authors of Effort. All rights reserved.
 
 The code, documentation, configuration files, data, metadata, symbolic scores,
 audio, timelines, and other materials distributed with this supplementary
@@ -48,7 +48,7 @@ Except with prior written permission from the copyright holders, you may not:
 
 ### 3. Third-party materials and limited rights
 
-This license grants rights only to the extent that the authors of Efforts hold
+This license grants rights only to the extent that the authors of Effort hold
 and are legally authorized to grant those rights. It does not grant any rights
 in third-party materials, services, trademarks, datasets, software, models, or
 other content. In particular:
@@ -86,4 +86,4 @@ OTHERWISE.
 ### 6. Additional permission
 
 For permission to use the Materials beyond the limited purposes stated above,
-contact the authors of Efforts and obtain prior written authorization.
+contact the authors of Effort and obtain prior written authorization.
