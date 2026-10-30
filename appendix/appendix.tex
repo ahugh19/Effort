@@ -30,153 +30,68 @@
 
 \section{Model training and dataset}
 
-\emph{Effort} uses a music-conditioned dance-generation model trained from scratch for this project.
-The model architecture is Lodge \citep{li2024lodge}, a two-stage coarse-to-fine diffusion network that generates dance motion by denoising Gaussian noise conditioned on a music track.
-Lodge was chosen because it is the most advanced music-to-dance model with open training code and a public dataset, so the full training run could be reproduced and logged.
-The diffusion process uses a cosine noise schedule over 1000 timesteps, and it predicts the clean motion.
-% rather than the noise.
-The training loss combines a mean-squared reconstruction term with velocity, forward-kinematics, and foot-contact terms, and the model is trained with conditioning dropout at probability 0.25 to support classifier-free guidance at inference.
-The trace analyzed here comes from the Global module, which is the coarse stage of the network.
-We did not initialize the model from pretrained dance-generation weights.
-Music is supplied to the model as precomputed 35-dimensional handcrafted audio features,
-% rather than through a learned or pretrained music encoder,
-and motion is represented as a 139-dimensional feature vector over 22 joints, the 139-feature format that the configuration selects as FINEDANCE\_139CUT.
-The training trace used in the artwork therefore records the optimization history of this specific run.
-% rather than the behavior of a downloaded checkpoint.
+\emph{Effort} uses Lodge \citep{li2024lodge}, a two-stage coarse-to-fine diffusion network that generates dance motion conditioned on music, trained from scratch for this project.
+The trace analyzed here comes from the Global module, the coarse stage of the network.
+Music enters the model as 35-dimensional handcrafted audio features, and motion is represented as a 139-dimensional feature vector over 22 joints.
+The trace therefore records the optimization history of this specific run.
+The training data is FineDance \citep{li2023finedance}, a motion-capture dataset of paired music and full-body 3D dance recordings performed by twenty-seven professional dancers, used in its standard training split.
+% In the version of the dataset available to us, the performers are credited collectively, without individual names attached to the motion sequences.
+Training ran for 3,500 epochs on a single NVIDIA H100, about 51 hours of active GPU time.
+The released configuration records the optimizer settings: Adan with a learning rate of \(4\times10^{-4}\) held constant, batch size 128 with gradient accumulation of three for an effective batch of 384.
+We disabled gradient clipping, so the logged gradient norm is the raw norm.
+A logging callback writes one row per batch, giving 155,232 rows over 52,516 optimizer steps.
+Each row records the step, epoch, total and component losses, gradient-norm statistics, the learning rate, and binary indicators for loss spikes, plateaus, and exploding or vanishing gradients, and every indicator is false in every row.
 
-The training data is FineDance \citep{li2023finedance}, a motion-capture dataset containing paired music and full-body 3D dance recordings performed by twenty-seven professional dancers.
-In the version of the dataset available to us, the performers are credited collectively, without individual names attached to the motion sequences.
-We use the dataset's standard training split.
-The FineDance recordings themselves are obtained from the dataset authors and are not redistributed with this work.
-The artwork retains this condition of collective attribution and discusses its implications in the main text.
-
-Training ran for about 3,500 epochs on a single NVIDIA H100, reaching epoch 3500 in the log against a configured end of epoch 3501.
-The log's elapsed-time column, measured in milliseconds from the first batch, covers about 51 hours of active training on the GPU after idle time between requeued jobs is excluded.
-The optimizer is Adan with a base learning rate of \(4\times10^{-4}\) held constant, since the configuration sets no learning-rate scheduler, and the Adan default weight decay of 0.02.
-The batch size is 128 with gradient accumulation of three, for an effective batch size of 384, and the random seed is 1234.
-The configuration sets no gradient-clipping threshold.
-The logging callback writes one row per batch, so the log is a per-batch record.
-This run comprises 155,232 logged batch rows and 52,516 recorded optimizer steps, over 3,500 epochs, all read directly from the log.
-% rather than inferred.
-Each logged row is a 39-column record that contains the optimizer step, epoch, batch index, total training loss and its component losses, gradient-norm measurements before and after clipping together with summary statistics, the learning rate, and binary indicators for conditions including loss spikes, plateaus, exploding gradients, and vanishing gradients.
-The gradient-clipping flag is false in every row.
-The software environment was PyTorch 2.1.2 with CUDA 12.1 and PyTorch Lightning 1.9.5.
-
-The downstream artwork uses three principal signals: training loss, mean gradient norm, and gradient-norm volatility.
-Volatility is measured two ways for two purposes.
-At the phase level, it is the standard deviation of the gradient norm over the phase's downsampled rows, and the scale-free ratio of that standard deviation to the phase mean drives the Effort mapping in Section~\ref{app:effort}.
-At the per-batch level, the log also stores a sign-change rate, defined as the fraction of individual gradient coordinates whose sign flips between two consecutive batches.
-This second quantity is a genuine oscillation measure and is well defined even though the gradient norm itself is nonnegative.
-The sonifier in Section~\ref{app:music} uses it for rhythm.
+The artwork uses three signals from the log: training loss, mean gradient norm, and gradient-norm volatility.
+Volatility is measured two ways.
+At the phase level, it is the standard deviation of the gradient norm over the phase's downsampled rows, and the ratio of that standard deviation to the phase mean drives the Effort mapping in Section~\ref{app:effort}.
+At the per-batch level, the log stores a sign-change rate, the fraction of gradient coordinates whose sign flips between consecutive batches, and the sonifier in Section~\ref{app:music} uses it for rhythm.
 
 A change-point detector divides the run into fourteen contiguous phases.
-Because a radial-basis-function cost over the full 155{,}232-row log is infeasible, the per-batch log is first downsampled to every fifteenth row in acquisition order, and the PELT algorithm from the \texttt{ruptures} library is run on this downsample with a radial-basis-function cost model, a penalty of 10, a merge window of 200 rows, and a minimum segment length of 500 rows, all measured in downsampled rows.
-It is applied to the smoothed loss and to the gradient norm, the two sets of breakpoints are merged, and the minimum-length constraint is enforced, which yields fourteen phases for this run.
-For each phase, the summary records its epoch range, the mean and standard deviation of loss and of gradient norm over its downsampled rows, the slope of an ordinary least-squares fit of the gradient norm against downsampled-sample index within the phase (the temporal trend), the corresponding loss slope, and the phase length in downsampled rows.
-
-We verified directly from the raw log that every anomaly indicator is false in all 155,232 rows.
-The resulting trace consists of an initial phase with unusually large and unstable gradients, in which the mean gradient norm is about 2.74, and the standard deviation is larger than the mean, followed by thirteen lower-amplitude phases of gradual convergence in which the mean loss falls from about 0.116 to about 0.0098 and the gradient norm settles between roughly 0.23 and 0.40.
+The per-batch log is downsampled to every fifteenth row in acquisition order, and the PELT algorithm from the \texttt{ruptures} library is run on the smoothed loss and on the gradient norm with a radial-basis-function cost, a penalty of 10, a merge window of 200 rows, and a minimum segment length of 500 rows, all in downsampled rows.
+The two sets of breakpoints are merged and the minimum-length constraint is enforced, which yields fourteen phases.
+Table~\ref{tab:phases} lists the per-phase statistics.
+The run opens with a phase of large, unstable gradients, followed by thirteen lower-amplitude phases of gradual convergence in which the mean loss falls from about 0.116 to about 0.0098.
 The artistic transformations described below operate on this continuous training history.
 
 \section{Translating the training trace into music}
 \label{app:music}
 
-The first translation converts the per-batch training log into a structured musical score.
-This sonification is generated by an artist-designed, rule-based procedure.
-Given the same log and parameter settings, the symbolic score can be regenerated deterministically, and the released tools can produce a dry preview rendering.
-The mastered audio render is retained as a fixed artifact. The minimal release regenerates the symbolic score and a dry preview, and the mastering step stays outside it.
-
-The sonifier interprets the training sequence through a mechanical player-piano and chamber-ensemble vocabulary.
-A player piano carries the principal melodic line, selected string voices and a low synthesizer drone provide the main supporting layers, and celesta, harp, contrabass, and string-pad material provide occasional enrichment.
-The score is written in D natural minor, in 4/4 time, with an initial tempo of 70 beats per minute.
-
-Four measurements derived from the log control four groups of musical parameters.
-
+The first translation turns the per-batch training log into a musical score through an artist-designed, rule-based procedure.
+Given the same log and settings, the procedure regenerates the same symbolic score.
+The score is written for a mechanical player piano with a small chamber ensemble, in D natural minor, in 4/4, at 70 beats per minute.
+The player piano carries the melody, strings and a low synthesizer drone support it, and celesta, harp, contrabass, and string pad enter occasionally.
+Four quantities from the log control four musical parameters, each normalized against this run's own range.
 \begin{enumerate}
-\item \textbf{Register.} The gradient norm is passed through a logarithm and then rescaled by a robust minimum-to-maximum normalization between the 1st and 99th percentiles of the sampled gradient-norm values, so the mapping is relative to this run’s own range.
-The normalized value sets the register of the melody and the accompaniment, and larger gradient norms move the material upward in register.
-Melodic motion is restricted primarily to seconds and thirds within the scale.
-
-\item \textbf{Rhythmic density.} The sign-change rate of the gradient, defined in the previous section as the fraction of gradient coordinates that reverse sign between consecutive batches, is percentile-normalized and mapped to the number and spacing of note onsets.
-Stable intervals produce sparse or sustained notes, while more volatile intervals produce denser subdivisions and syncopation.
-
-\item \textbf{Tremolo and chromatic inflection.} The absolute change in the loss is passed through a logarithm and percentile-normalized, and its maximum within each bar is compared with the 82nd percentile of that quantity across all bars.
-Bars at or above this self-referential threshold receive a string tremolo and one or more unresolved chromatic neighbor tones.
-Chromatic material is otherwise excluded from the generated lines.
-
-\item \textbf{Spectral brightness.} The per-bar normalized gradient level controls the brightness of the synthesizer layer through MIDI controller 74.
-Higher gradient levels produce a brighter pad and lower levels a darker one, so the pad is generally darker after the high-gradient opening phase.
+\item \textbf{Register.} The gradient norm sets the register of the melody and accompaniment. Larger gradients move the material upward.
+\item \textbf{Rhythmic density.} The gradient sign-change rate sets the number and spacing of note onsets. Stable intervals give sparse, sustained notes, and volatile intervals give denser subdivisions and syncopation.
+\item \textbf{Tremolo and chromatic inflection.} Bars with a change in loss above the 82nd percentile across the piece receive a string tremolo and unresolved chromatic neighbor tones. The lines are otherwise diatonic.
+\item \textbf{Spectral brightness.} The gradient level sets the brightness of the synthesizer pad, so the pad darkens after the high-gradient opening.
 \end{enumerate}
 
-Data controls register, rhythmic density, the tremolo and chromatic accents, and the phase durations.
-The key, the harmonic progressions, the instrumentation, and the five-part formal template are artist-designed.
+Data controls register, rhythmic density, the accents, and the phase durations.
+The key, the harmonic progressions, the instrumentation, and the five-part form are artist-designed.
 
-The four mappings above act bar by bar.
-The larger form is set by the mode in which the sonifier runs, and for the video it runs in a phase-proportional mode.
-The fourteen phases are laid out in training order on a single linear clock.
-Each phase receives a number of bars approximately proportional to its length, with a floor of two bars so that it stays audible, and the beats of each phase sample that phase's own steps evenly, so music time broadly follows training time at bar-level resolution.
-The high-amplitude opening phase comes first, and it carries the run's single largest gradient norm.
-% , which is 89.27 at epoch 2, batch 29 in the raw log.
-The converged phases follow in order and thin out toward the end.
-
-Over this clock, the instrumentation follows a fixed five-part shape by position.
-A piano-led opening gives way to a build in which string and enrichment layers enter progressively, then a short caesura reduces the texture, then a denser passage, and finally a decay in which the layers drop out progressively.
-Each part carries its own four-chord progression and repeating figure, so the material does not reduce to a single repeated loop.
-The score remains centered on D natural minor, with the chromatic inflections described above, and ends on an open fifth, D and A, held open to the final bar.
-Its final four bars slow through a real tempo curve from 70 to approximately 38 beats per minute.
-The Effort words and the deterministic score are indexed by the same fourteen training phases and therefore share one underlying phase clock.
-The deterministic symbolic score is retained as \texttt{audio/sonification.mid}.
-The corresponding mastered render is retained as the fixed artifact \texttt{audio/sonification\_render.mp3}, whose duration is about 167 seconds.
+The fourteen training phases are laid out in training order on one linear clock.
+Each phase receives bars in proportion to its length, with a floor of two bars to keep every phase audible.
+Music time therefore follows training time at bar-level resolution.
+Over this clock the instrumentation follows a fixed five-part shape, a piano-led opening, a build, a short caesura, a denser passage, and a decay as the layers drop out.
+The score ends on an open fifth, D and A, and its final four bars slow from 70 to about 38 beats per minute.
+The Effort words in Section~\ref{app:effort} are indexed by the same fourteen phases, so the two translations share one clock.
 
 \section{Translating the training trace into Laban Effort words}
 \label{app:effort}
 
-The second translation assigns one Laban Effort word to each of the fourteen training phases.
-The mapping uses the three Effort factors of Weight, Time, and Space \citep{laban1947effort}.
-It is an artist-designed analytical convention applied to the statistics of this run.
-It describes the statistics of the run, and makes no claim about an internal feeling, intention, or expressive state of the model.
+The second translation gives one Laban Effort word to each of the fourteen phases through the three Effort factors of \textit{Weight}, \textit{Time}, and \textit{Space} \citep{laban1947effort}.
+The mapping is an artist-designed convention applied to the statistics of this run.
 
-For phase \(p\), let \(\mu_p\) denote its mean gradient norm, \(\sigma_p\) its gradient-norm standard deviation, and \(\tau_p\) its temporal trend, defined as the slope of an ordinary least-squares fit of the gradient norm against sample index within the phase and measured in units of gradient norm per sample.
-Let
-
-\[
-m_{\mu} = \operatorname{median}_{p}(\mu_p)
-\]
-
-and
-
-\[
-m_{\tau} = \operatorname{median}_{p}(|\tau_p|).
-\]
-
-The three binary Effort factors are assigned as follows.
-
-\begin{align*}
-\text{Weight}(p) &=
-\begin{cases}
-\text{strong}, & \mu_p \geq m_{\mu},\\
-\text{light},  & \mu_p < m_{\mu},
-\end{cases}
-\\[4pt]
-\text{Time}(p) &=
-\begin{cases}
-\text{sudden},    & \sigma_p \geq \mu_p,\\
-\text{sustained}, & \sigma_p < \mu_p,
-\end{cases}
-\\[4pt]
-\text{Space}(p) &=
-\begin{cases}
-\text{direct},   & |\tau_p| \geq m_{\tau},\\
-\text{indirect}, & |\tau_p| < m_{\tau}.
-\end{cases}
-\end{align*}
-
-Weight compares the mean gradient level of a phase with the median phase level of the complete run.
-Time distinguishes phases whose variability is at least as large as their mean, which is a coefficient of variation of one or more, from phases with lower relative variability.
-Space distinguishes phases with a comparatively pronounced trend from phases whose trend remains within the run's median absolute-trend threshold.
-These operators were checked against the implementation, and in each case equality is assigned to the direction stated above.
-
-The three binary factors produce the eight Effort combinations shown in Table~\ref{tab:effort}.
+For phase \(p\), let \(\mu_p\) be its mean gradient norm, \(\sigma_p\) the standard deviation of the gradient norm, and \(\tau_p\) its temporal trend, the slope of a least-squares fit of the gradient norm over the phase.
+Let \(m_\mu\) and \(m_\tau\) be the medians of \(\mu_p\) and \(|\tau_p|\) over the fourteen phases.
+\textit{Weight} is strong when \(\mu_p \geq m_\mu\) and light otherwise.
+\textit{Time} is sudden when \(\sigma_p \geq \mu_p\) and sustained otherwise.
+\textit{Space} is direct when \(|\tau_p| \geq m_\tau\) and indirect otherwise.
+\textit{Weight} and \textit{Space} compare a phase with the whole run, and \textit{Time} compares a phase's variability with its own mean.
+The three binary factors give the eight Effort words in Table~\ref{tab:effort}.
 
 \begin{table}[h]
   \centering
@@ -184,14 +99,14 @@ The three binary factors produce the eight Effort combinations shown in Table~\r
     \hline
     Weight & Time & Space & Effort \\
     \hline
-    light  & sustained & indirect & Float \\
-    light  & sustained & direct   & Glide \\
-    light  & sudden    & direct   & Dab \\
-    light  & sudden    & indirect & Flick \\
-    strong & sustained & direct   & Press \\
-    strong & sustained & indirect & Wring \\
-    strong & sudden    & direct   & Punch \\
-    strong & sudden    & indirect & Slash \\
+    light  & sustained & indirect & \textit{Float} \\
+    light  & sustained & direct   & \textit{Glide} \\
+    light  & sudden    & direct   & \textit{Dab} \\
+    light  & sudden    & indirect & \textit{Flick} \\
+    strong & sustained & direct   & \textit{Press} \\
+    strong & sustained & indirect & \textit{Wring} \\
+    strong & sudden    & direct   & \textit{Punch} \\
+    strong & sudden    & indirect & \textit{Slash} \\
     \hline
   \end{tabular}
   \caption{Artist-designed mapping from the three binary Laban Effort factors
@@ -199,14 +114,12 @@ The three binary factors produce the eight Effort combinations shown in Table~\r
   \label{tab:effort}
 \end{table}
 
-For this run the median phase-level gradient norm is approximately \(0.342\) and the median absolute temporal trend is approximately \(4.9\times10^{-5}\).
-The first phase is a statistical outlier.
-Its mean gradient norm is approximately \(2.74\), its standard deviation exceeds its mean, and its trend is strongly negative, so it is classified as strong, sudden, and direct, which is the Effort Punch.
-It is the only phase that is sudden.
-Every later phase is sustained, because after training settles every phase has a standard deviation below its mean.
-Weight divides near the median, so the converging phases fall into light Efforts through the low-gradient middle of the run and strong Efforts through the higher-gradient later phases, while Space splits the run almost evenly between direct and indirect by construction of the median threshold.
-Table~\ref{tab:phases} lists the full assignment for all fourteen phases.
-% , which makes the mapping auditable without access to the code.
+The first phase, with large and unstable gradients and a steep downward trend, is strong, sudden, and direct, the Effort \textit{Punch}.
+It is the only sudden phase, since every later phase has a standard deviation below its mean.
+The run then passes through \textit{Press}, settles into \textit{Float} and \textit{Glide} through its low-gradient middle, and ends in \textit{Press} and \textit{Wring} as the gradient rises again.
+Table~\ref{tab:phases} lists the full assignment.
+The resulting Effort sequence is a choreographic interpretation constructed through our selection of signals, segmentation, thresholds, and factor mapping.
+In the performance the dancer receives each word as an open score. The word sets the quality of a movement, and the pose and trajectory remain their choice.
 
 \begin{table*}[t]
   \centering
@@ -216,19 +129,19 @@ Table~\ref{tab:phases} lists the full assignment for all fourteen phases.
     Phase & Start step & Epoch & $\mu_p$ & $\sigma_p$ & $\tau_p$ & Weight & Time & Space & Effort \\
     \hline
     1  & 0     & 0    & 2.741 & 5.017 & $-1.6\times10^{-2}$ & strong & sudden    & direct   & Punch \\
-    2  & 2593  & 172  & 0.343 & 0.273 & $-2.3\times10^{-4}$ & strong & sustained & direct   & Press \\
-    3  & 5610  & 374  & 0.235 & 0.175 & $+9.4\times10^{-6}$ & light  & sustained & indirect & Float \\
-    4  & 8704  & 580  & 0.233 & 0.200 & $-9.8\times10^{-5}$ & light  & sustained & direct   & Glide \\
-    5  & 11260 & 750  & 0.248 & 0.198 & $+1.0\times10^{-4}$ & light  & sustained & direct   & Glide \\
-    6  & 15019 & 1001 & 0.272 & 0.170 & $+3.2\times10^{-5}$ & light  & sustained & indirect & Float \\
-    7  & 18292 & 1219 & 0.283 & 0.180 & $-1.4\times10^{-5}$ & light  & sustained & indirect & Float \\
-    8  & 21155 & 1410 & 0.313 & 0.245 & $+1.3\times10^{-4}$ & light  & sustained & direct   & Glide \\
-    9  & 25016 & 1667 & 0.341 & 0.204 & $+5.3\times10^{-5}$ & light  & sustained & direct   & Glide \\
-    10 & 28902 & 1926 & 0.370 & 0.218 & $+6.5\times10^{-5}$ & strong & sustained & direct   & Press \\
-    11 & 33530 & 2235 & 0.386 & 0.221 & $+4.6\times10^{-5}$ & strong & sustained & indirect & Wring \\
-    12 & 36394 & 2426 & 0.398 & 0.247 & $+2.2\times10^{-5}$ & strong & sustained & indirect & Wring \\
-    13 & 43374 & 2891 & 0.379 & 0.209 & $+1.3\times10^{-5}$ & strong & sustained & indirect & Wring \\
-    14 & 45931 & 3062 & 0.370 & 0.207 & $+3.2\times10^{-6}$ & strong & sustained & indirect & Wring \\
+    2  & 2593  & 172  & 0.343 & 0.273 & $-2.3\times10^{-4}$ & strong & sustained & direct   & \textit{Press} \\
+    3  & 5610  & 374  & 0.235 & 0.175 & $+9.4\times10^{-6}$ & light  & sustained & indirect & \textit{Float} \\
+    4  & 8704  & 580  & 0.233 & 0.200 & $-9.8\times10^{-5}$ & light  & sustained & direct   & \textit{Glide} \\
+    5  & 11260 & 750  & 0.248 & 0.198 & $+1.0\times10^{-4}$ & light  & sustained & direct   & \textit{Glide} \\
+    6  & 15019 & 1001 & 0.272 & 0.170 & $+3.2\times10^{-5}$ & light  & sustained & indirect & \textit{Float} \\
+    7  & 18292 & 1219 & 0.283 & 0.180 & $-1.4\times10^{-5}$ & light  & sustained & indirect & \textit{Float} \\
+    8  & 21155 & 1410 & 0.313 & 0.245 & $+1.3\times10^{-4}$ & light  & sustained & direct   & \textit{Glide} \\
+    9  & 25016 & 1667 & 0.341 & 0.204 & $+5.3\times10^{-5}$ & light  & sustained & direct   & \textit{Glide} \\
+    10 & 28902 & 1926 & 0.370 & 0.218 & $+6.5\times10^{-5}$ & strong & sustained & direct   & \textit{Press} \\
+    11 & 33530 & 2235 & 0.386 & 0.221 & $+4.6\times10^{-5}$ & strong & sustained & indirect & \textit{Wring} \\
+    12 & 36394 & 2426 & 0.398 & 0.247 & $+2.2\times10^{-5}$ & strong & sustained & indirect & \textit{Wring} \\
+    13 & 43374 & 2891 & 0.379 & 0.209 & $+1.3\times10^{-5}$ & strong & sustained & indirect & \textit{Wring} \\
+    14 & 45931 & 3062 & 0.370 & 0.207 & $+3.2\times10^{-6}$ & strong & sustained & indirect & \textit{Wring} \\
     \hline
   \end{tabular}
   \caption{The fourteen phases of the training run. Start step is the first
@@ -241,27 +154,15 @@ Table~\ref{tab:phases} lists the full assignment for all fourteen phases.
   \label{tab:phases}
 \end{table*}
 
-The resulting Effort sequence is 
-% not presented as a set of expressive qualities discovered inside the model.
-a choreographic interpretation constructed through our selection of signals, segmentation method, thresholds, and factor mapping.
-In the performance the dancer receives each word as an open score. The word sets the quality of a movement, and the pose and trajectory remain her choice.
-
 \section{Suno re-performance and temporal alignment}
 
-The rule-based sonifier determines the melody, harmony, formal structure, phase durations, and initial tempo of the score.
-For the version used in the video we subsequently passed the rendered sonification to Suno \citep{suno2026} using its Cover mode.
+The rule-based score fixes the melody, harmony, form, phase durations, and tempo.
+For the video we passed its rendering to Suno \citep{suno2026}, a generative music service, in its Cover mode.
+This step is a generative re-performance outside the deterministic mapping, and Suno can return a different cover on each request, so we keep the selected outputs as fixed artifacts.
 
-This step is a generative re-performance of the sonification and lies outside the deterministic mapping.
-The uploaded sonification provides the source audio, while the prompt and generation settings ask Suno to preserve its melodic and formal identity while changing its instrumentation, timbre, spatial character, and micro-timing.
-Suno is a stochastic generative service, so the same prompt and settings can produce a different cover on each request.
-We therefore retain the selected audio output as part of the supplementary material.
-The selected cover is \texttt{audio/cover.mp3}, and its duration is about 161.8 seconds.
-There were six candidate covers generated.
-They used the same prompt and settings, and the artists selected the take closest to the source player-piano motif and its restrained dynamic. The file is used as Suno delivered it.
-The model version is Suno V5.5.
-
-The generation was configured as instrumental, with Audio Influence set to 85\%, Style Influence to 15\%, and Weirdness to 5\%. These settings were chosen to prioritize the uploaded score while allowing limited changes in timbre and production.
-The exact prompt was the following.
+The presented cover was generated with model V5.5 as an instrumental, with Audio Influence 85\%, Style Influence 15\%, and Weirdness 5\%, from the following prompt.
+We generated six candidates with the same prompt and settings and selected the take closest to the source player-piano motif and its restrained dynamic.
+The file is used as Suno delivered it.
 
 \begin{quote}
 \small
@@ -278,27 +179,16 @@ The ending slows and settles on a bare open fifth, unresolved, fading into
 a dry, cold room tail. Mood: wintry, elegant, austere, lucid, still;
 mechanical calm rather than passion. Instrumental only, close-miked modern
 classical recording, high detail, quiet mastering.
-
-\vspace{4pt}\noindent
-Weirdness 5\%, Style Influence 15\%, Audio Influence 85\%.
 \end{quote}
 
-The generated cover introduces timing deviations that are not present in the rule-based render.
-To align the visual materials with the selected cover, we compute chroma features for the cover audio and for the symbolic score, and use dynamic time warping to estimate a monotone correspondence between their timelines.
-The cover audio is loaded in mono at 22{,}050 samples per second.
-Chroma is computed from the cover audio with a constant-Q chroma transform at a hop length of 1024 samples, which gives about 21.5 frames per second, and the symbolic score is converted to chroma at the same frame rate.
-Each chroma frame is normalized to unit length with a small floor added first so that silent frames do not become undefined.
-Dynamic time warping is run with a cosine distance and a Sakoe-Chiba band of radius 0.25 of the sequence length.
-The resulting path is reduced to a monotone, non-decreasing map from positions in the original score to positions in the generated cover, and intermediate positions are read off by linear interpolation.
-A separate onset detector, run on the onset strength envelope with a hop of 512 samples, provides the accent layer.
+The cover changes the timing of the score, so we align the visual materials to it with chroma-based dynamic time warping, a monotone map from score time to cover time.
+The plotted curves, bar and phase boundaries, and Effort-word changes all follow the timing of the audio in the video.
 
-We apply this mapping to all score-relative events, including note onsets, bar boundaries, training-phase boundaries, the progression of the plotted curves, and Effort-word changes.
-Monotonicity is guaranteed by construction, and the band constraint bounds the drift, so we used the alignment as computed.
-The visualized training curves and Effort words therefore follow the timing of the final audio used in the video.
-
-For the dance, the model is conditioned on a second Suno cover of the same sonification, arranged in the style of Kunqu opera accompaniment. The model produces more coherent motion from this cover than from the sparse texture of the presented cover, and the artists chose it because the movement it produces carries the stillness and austerity closest to the finished work.
-This dance-driving cover keeps the key, phrase structure, and five-part form of the sonification at close to the same tempo, and differs from the presented cover only in instrumentation and surface character, and the generated dance is aligned to the presented cover with the same chroma-based dynamic-time-warping so the movement and the music stay in correspondence.
-It was generated in Suno's Cover mode with Audio Influence 85\% and Weirdness 0\% on model version V4.5, from the following prompt.
+The dance is conditioned on a second cover of the same score, arranged in the style of Kunqu opera accompaniment.
+The model produces more coherent motion from this cover than from the sparse texture of the presented cover, and its movement carries the stillness and austerity closest to the finished work.
+This cover keeps the key, phrase structure, and five-part form of the score at close to the same tempo, and differs from the presented cover in instrumentation and surface character.
+The generated dance is aligned to the presented cover with the same warping.
+It was generated with model V4.5, Audio Influence 85\%, and Weirdness 0\%, from the following prompt.
 
 \begin{quote}
 \small
@@ -318,27 +208,17 @@ stage choreography. Mostly instrumental.
 
 \section{Reproducibility and retained artifacts}
 
-The per-batch training log, phase summaries, mapping parameters, symbolic sonification score, initial audio render, the two Suno covers, and temporal warp are retained as separate artifacts.
-The release provides code to recompute the training-phase boundaries, the Effort-word assignment from the retained phase summary, and the symbolic score from the log and the stated parameters.
-The retained phase summary is the canonical record of the reported phase statistics, and the released rendering path produces a dry preview of the initial audio render, while the mastered version is retained as a file.
-Both Suno covers are preserved as fixed outputs because the external generative service can produce a different result on each request.
-
-The principal retained files are the training log \texttt{data/training\_log.csv.gz} and its phase summary \texttt{data/phase\_log.csv}, the sonifier \texttt{code/gen\_sonification.py} with its deterministic symbolic score \texttt{audio/sonification.mid} and fixed mastered render \texttt{audio/sonification\_render.mp3}, the alignment code \texttt{code/build\_stage\_timeline.py} with its output \texttt{timeline/stage\_timeline.json}, and the two covers \texttt{audio/cover.mp3} (presented) and \texttt{audio/cover\_kun.mp3} (dance-driving).
-
-The code and the derived artifacts, the logs, phase summaries, symbolic scores, audio renders, and alignment data, are released under the license stated in the accompanying release README.
-This release is published at \url{https://github.com/ahugh19/Effort}.
-% (the minimal public subset).
-The FineDance recordings remain with their authors \citep{li2023finedance} and are available from them under the dataset license.
-
-The pipeline runs in the following order. Steps 1 and 5 are external to the release, and their outputs are retained as fixed artifacts.
-
+The release at \url{https://github.com/ahugh19/Effort} contains the per-batch training log, the phase summary, the symbolic score and its mastered render, the two Suno covers, the alignment timeline, and the code for each deterministic step.
+The pipeline runs in the following order. Steps 1 and 5 are outside the release, and their outputs are kept as fixed files.
 \begin{enumerate}
-\item Outside this minimal package, train Lodge on FineDance and write the per-batch log; release verification begins from the retained log.
-\item Segment the log into fourteen phases with the change-point detector.
+\item Train Lodge on FineDance and write the per-batch log.
+\item Segment the log into fourteen phases.
 \item Generate the symbolic score and, optionally, a dry preview render.
 \item Assign one Effort word to each phase.
 \item Generate and select the Suno cover.
-% \item Generate and select the two Suno covers, the presented one and the dance-driving one.
-\item Compute the dynamic-time-warping alignment between render and cover.
+\item Align the score to the presented cover by dynamic time warping.
 \item Render the curve, word, dancer, and skeleton layers on the aligned timeline.
 \end{enumerate}
+The exact parameters of steps 2, 3, 4, and 6 are recorded in the released scripts.
+The mastered render stays a fixed file because mastering happened outside the package, and the covers stay fixed files because the service returns a different result on each request.
+The FineDance recordings remain with their authors \citep{li2023finedance} under the dataset license, and the released material is provided under the license stated in the release README.
